@@ -5,4 +5,3 @@ opencv-python-headless
 pillow
 numpy
 reportlab
-google-genai

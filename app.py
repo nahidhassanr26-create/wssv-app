@@ -10,7 +10,7 @@ from reportlab.lib import colors
 import io
 import datetime
 
-# পেজ সেটিংস
+# ১. পেজ সেটিংস
 st.set_page_config(page_title="WSSV ডিটেকশন ও পরামর্শ কেন্দ্র", page_icon="🦐", layout="centered")
 
 @st.cache_resource
@@ -20,7 +20,7 @@ def load_model():
 try:
     model = load_model()
 except Exception as e:
-    st.error("মডেল লোড হতে সমস্যা হচ্ছে।")
+    st.error("মডেল লোড হতে সমস্যা হচ্ছে। 'best.tflite' ফাইলটি সঠিক জায়গায় আছে কিনা চেক করুন।")
 
 st.title("🦐 WSSV (হোয়াইট স্পট) ডিটেকশন ও পরামর্শ কেন্দ্র")
 st.write("আপনার চিংড়ির ছবি আপলোড করে বা সরাসরি ক্যামেরা দিয়ে তুলে ২৪/৭ পরীক্ষা করুন।")
@@ -29,8 +29,10 @@ uploaded_file = st.file_uploader("চিংড়ির ছবি নির্ব�
 cam_file = st.camera_input("অথবা সরাসরি ছবি তুলুন")
 
 image = None
-if uploaded_file is not None: image = Image.open(uploaded_file)
-elif cam_file is not None: image = Image.open(cam_file)
+if uploaded_file is not None: 
+    image = Image.open(uploaded_file)
+elif cam_file is not None: 
+    image = Image.open(cam_file)
 
 # পিডিএফ জেনারেটর ফাংশন
 def generate_pdf(status, advice, spot_cnt, severity, conf_pct, img_array):
@@ -39,7 +41,6 @@ def generate_pdf(status, advice, spot_cnt, severity, conf_pct, img_array):
     story = []
     styles = getSampleStyleSheet()
     
-    # কাস্টম স্টাইল (ইংরেজি ফন্ট ব্যবহার করা হয়েছে পিডিএফ ফ্রেন্ডলি করার জন্য)
     title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=22, textColor=colors.HexColor('#1E3A8A'), spaceAfter=15)
     body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=12, leading=16, spaceAfter=10)
     alert_style = ParagraphStyle('Alert', parent=styles['Normal'], fontSize=12, leading=16, textColor=colors.HexColor('#B91C1C'), spaceAfter=10)
@@ -66,7 +67,7 @@ def generate_pdf(status, advice, spot_cnt, severity, conf_pct, img_array):
     story.append(Spacer(1, 20))
     
     story.append(Paragraph("<b>Actionable Advice / Recommendations:</b>", ParagraphStyle('Sub', parent=styles['Heading2'], fontSize=14, spaceAfter=8)))
-    # বাংলা পরামর্শ পিডিএফে এড়াতে ইংরেজিতে সুন্দর করে ক্লিন গাইডলাইন দেওয়া হলো
+    
     if spot_cnt > 0:
         adv_text = "1. Stop water exchange immediately to prevent spreading.<br/>2. Conduct emergency harvest if shrimps are near marketable size.<br/>3. Disinfect nets and tools with chlorine water before using in other ponds.<br/>4. Immediately contact your local sub-district fisheries officer."
     else:
@@ -81,7 +82,6 @@ def generate_pdf(status, advice, spot_cnt, severity, conf_pct, img_array):
 if image is not None:
     st.image(image, caption='আপনার দেওয়া ছবি', use_container_width=True)
     
-    # সেভ স্টেট তৈরি করা যাতে বাটন ক্লিকে ইমেজ হারিয়ে না যায়
     if 'processed' not in st.session_state:
         st.session_state.processed = False
 
@@ -97,7 +97,20 @@ if image is not None:
             spot_count = len(r.boxes)
             if spot_count > 0:
                 max_conf = np.max(r.boxes.conf.cpu().numpy())
-                img_cv = r.plot()
+                
+                # 🎯 কাস্টম বাউন্ডিং বক্স এবং সঠিক 'WSSV' লেবেল দেওয়ার ফিক্সড লজিক:
+                boxes = r.boxes.xyxy.cpu().numpy()
+                scores = r.boxes.conf.cpu().numpy()
+                
+                for box, score in zip(boxes, scores):
+                    if score >= 0.05:
+                        x1, y1, x2, y2 = map(int, box)
+                        # লাল রঙের বাউন্ডিং বক্স ড্র করা
+                        cv2.rectangle(img_cv, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                        # ভুল লেবেল ওভাররাইড করে 'WSSV' টেক্সট বসানো
+                        label = f"WSSV: {score:.2f}"
+                        cv2.putText(img_cv, label, (x1, max(y1 - 10, 10)), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
         
         output_image = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
         

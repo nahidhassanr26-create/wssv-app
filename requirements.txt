@@ -1,5 +1,6 @@
 streamlit
 ultralytics
+ai-edge-litert
 opencv-python-headless
 pillow
 numpy
